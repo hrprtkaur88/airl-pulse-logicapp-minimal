@@ -10,9 +10,15 @@ Minimal implementation for the AIRL monthly flow through report generation. This
 
 The pipeline is expected to write source artifacts to the configured `data` blob container. The Function reads those workbooks, runs the copied `ai-foundry/jobs/run_batch.py` pipeline and `ai-foundry/skill` scripts, then writes reports to the configured `report` blob container.
 
+## Architecture
+
+See [`docs/architecture.md`](docs/architecture.md) for the simplified architecture diagram and component readout.
+
 ## Repository layout
 
 ```text
+docs/
+  architecture.md  # simplified architecture diagram and readout
 infra/
   main.bicep       # subscription-scope deployment entry point
   logicapp.bicep   # Logic App Consumption workflow resource
