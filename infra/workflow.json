@@ -1,0 +1,201 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "storageAccountName": {
+      "type": "string"
+    },
+    "dataContainerName": {
+      "type": "string",
+      "defaultValue": "data"
+    },
+    "reportContainerName": {
+      "type": "string",
+      "defaultValue": "report"
+    },
+    "pipelineEndpoint": {
+      "type": "string"
+    },
+    "pipelineName": {
+      "type": "string"
+    },
+    "pipelineAudience": {
+      "type": "string",
+      "defaultValue": "https://dev.azuresynapse.net/"
+    },
+    "batchEndpoint": {
+      "type": "string"
+    },
+    "batchName": {
+      "type": "string"
+    },
+    "batchAudience": {
+      "type": "string"
+    }
+  },
+  "triggers": {
+    "MonthlyRecurrence": {
+      "type": "Recurrence",
+      "recurrence": {
+        "frequency": "Month",
+        "interval": 1,
+        "schedule": {
+          "hours": [
+            "2"
+          ],
+          "minutes": [
+            0
+          ],
+          "monthDays": [
+            1
+          ]
+        },
+        "timeZone": "UTC"
+      }
+    }
+  },
+  "actions": {
+    "Initialize_runMonth": {
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "runMonth",
+            "type": "string",
+            "value": "@formatDateTime(utcNow(), 'MMyyyy')"
+          }
+        ]
+      },
+      "runAfter": {}
+    },
+    "Step_1_Run_Pipeline_MSI": {
+      "type": "Http",
+      "inputs": {
+        "method": "POST",
+        "uri": "@{concat(parameters('pipelineEndpoint'), '/pipelines/', parameters('pipelineName'), '/createRun?api-version=2020-12-01')}",
+        "authentication": {
+          "type": "ManagedServiceIdentity",
+          "audience": "@parameters('pipelineAudience')"
+        },
+        "body": {
+          "runMonth": "@variables('runMonth')",
+          "storageAccountName": "@parameters('storageAccountName')",
+          "dataContainerName": "@parameters('dataContainerName')",
+          "reportContainerName": "@parameters('reportContainerName')"
+        },
+        "retryPolicy": {
+          "type": "exponential",
+          "count": 3,
+          "interval": "PT30S",
+          "maximumInterval": "PT10M"
+        }
+      },
+      "runAfter": {
+        "Initialize_runMonth": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Wait_For_Pipeline": {
+      "type": "Until",
+      "expression": "@contains(createArray('Succeeded','Failed','Cancelled'), body('Poll_Pipeline')?['status'])",
+      "limit": {
+        "count": 60,
+        "timeout": "PT2H"
+      },
+      "actions": {
+        "Delay_1m": {
+          "type": "Wait",
+          "inputs": {
+            "interval": {
+              "count": 1,
+              "unit": "Minute"
+            }
+          },
+          "runAfter": {}
+        },
+        "Poll_Pipeline": {
+          "type": "Http",
+          "inputs": {
+            "method": "GET",
+            "uri": "@{concat(parameters('pipelineEndpoint'), '/pipelineruns/', body('Step_1_Run_Pipeline_MSI')?['runId'], '?api-version=2020-12-01')}",
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "audience": "@parameters('pipelineAudience')"
+            }
+          },
+          "runAfter": {
+            "Delay_1m": [
+              "Succeeded"
+            ]
+          }
+        }
+      },
+      "runAfter": {
+        "Step_1_Run_Pipeline_MSI": [
+          "Succeeded"
+        ]
+      }
+    },
+    "Guard_Pipeline_Succeeded": {
+      "type": "If",
+      "expression": {
+        "equals": [
+          "@body('Poll_Pipeline')?['status']",
+          "Succeeded"
+        ]
+      },
+      "actions": {
+        "Step_2_Start_Batch_MSI": {
+          "type": "Http",
+          "inputs": {
+            "method": "POST",
+            "uri": "@{concat(parameters('batchEndpoint'), '/', parameters('batchName'))}",
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "audience": "@parameters('batchAudience')"
+            },
+            "body": {
+              "runMonth": "@variables('runMonth')",
+              "pipelineRunId": "@body('Step_1_Run_Pipeline_MSI')?['runId']",
+              "storageAccountName": "@parameters('storageAccountName')",
+              "dataContainerName": "@parameters('dataContainerName')",
+              "reportContainerName": "@parameters('reportContainerName')"
+            },
+            "retryPolicy": {
+              "type": "exponential",
+              "count": 3,
+              "interval": "PT30S",
+              "maximumInterval": "PT10M"
+            }
+          },
+          "limit": {
+            "timeout": "PT9M"
+          },
+          "runAfter": {}
+        }
+      },
+      "else": {
+        "actions": {
+          "Terminate_Pipeline_Failed": {
+            "type": "Terminate",
+            "inputs": {
+              "runStatus": "Failed",
+              "runError": {
+                "code": "PipelineNotSucceeded",
+                "message": "@{body('Poll_Pipeline')?['status']}"
+              }
+            },
+            "runAfter": {}
+          }
+        }
+      },
+      "runAfter": {
+        "Wait_For_Pipeline": [
+          "Succeeded"
+        ]
+      }
+    }
+  }
+}
+

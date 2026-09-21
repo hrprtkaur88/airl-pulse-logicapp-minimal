@@ -1,0 +1,13 @@
+bin/
+obj/
+.vs/
+.vscode/
+
+# Local deployment output
+*.parameters.local.json
+*.bicepparam
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+
