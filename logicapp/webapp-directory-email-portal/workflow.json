@@ -1,0 +1,170 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$connections": {
+      "type": "Object",
+      "defaultValue": {}
+    },
+    "webAppBaseUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Base URL of the Entra-protected AIRL web app, without a trailing slash."
+      }
+    },
+    "portalUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "URL users should open from the report-ready email. Usually the same as webAppBaseUrl."
+      }
+    },
+    "adminAudience": {
+      "type": "string",
+      "metadata": {
+        "description": "Managed Identity token audience for the web app admin endpoints, for example api://<app-registration-client-id>."
+      }
+    },
+    "supportEmail": {
+      "type": "string"
+    }
+  },
+  "triggers": {
+    "ReportReady": {
+      "type": "Request",
+      "kind": "Http",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "runMonth": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "actions": {
+    "Initialize_runMonth": {
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "runMonth",
+            "type": "string",
+            "value": "@coalesce(triggerBody()?['runMonth'], formatDateTime(utcNow(), 'MMyyyy'))"
+          }
+        ]
+      },
+      "runAfter": {}
+    },
+    "Try_Scope": {
+      "type": "Scope",
+      "actions": {
+        "Query_Users_From_WebApp": {
+          "type": "Http",
+          "inputs": {
+            "method": "GET",
+            "uri": "@{concat(parameters('webAppBaseUrl'), '/admin/list-users')}",
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "audience": "@parameters('adminAudience')"
+            },
+            "retryPolicy": {
+              "type": "exponential",
+              "count": 3,
+              "interval": "PT30S",
+              "maximumInterval": "PT10M"
+            }
+          },
+          "runAfter": {}
+        },
+        "Fan_Out_Report_Emails": {
+          "type": "Foreach",
+          "foreach": "@body('Query_Users_From_WebApp')",
+          "runtimeConfiguration": {
+            "concurrency": {
+              "repetitions": 10
+            }
+          },
+          "actions": {
+            "Send_Report_Email": {
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['office365']['connectionId']"
+                  }
+                },
+                "method": "post",
+                "path": "/v2/Mail",
+                "body": {
+                  "To": "@items('Fan_Out_Report_Emails')?['email']",
+                  "Subject": "@{concat('Your ', variables('runMonth'), ' AIRL Pulse Report is ready - ', items('Fan_Out_Report_Emails')?['client_name'])}",
+                  "Body": "@{concat('<p>Hi ', items('Fan_Out_Report_Emails')?['user_name'], ',</p><p>Your latest AIRL Pulse Report for <strong>', items('Fan_Out_Report_Emails')?['client_name'], '</strong> is available.</p><p><a href=\"', parameters('portalUrl'), '\">Open the report portal</a></p><p>This link requires Entra sign-in and only shows reports authorized for your account.</p><p>- Automated by AIRL Pulse Report</p>')}",
+                  "Importance": "Normal"
+                }
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Query_Users_From_WebApp": [
+              "Succeeded"
+            ]
+          }
+        }
+      },
+      "runAfter": {
+        "Initialize_runMonth": [
+          "Succeeded"
+        ]
+      }
+    },
+    "On_Failure_Notify_Support": {
+      "type": "Scope",
+      "actions": {
+        "Send_Failure_Email": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "connection": {
+                "name": "@parameters('$connections')['office365']['connectionId']"
+              }
+            },
+            "method": "post",
+            "path": "/v2/Mail",
+            "body": {
+              "To": "@parameters('supportEmail')",
+              "Subject": "AIRL Pulse Report email fan-out FAILED",
+              "Body": "<p>The webapp-directory-email-portal fan-out workflow failed. Check the Logic App run history for details.</p>",
+              "Importance": "High"
+            }
+          },
+          "runAfter": {}
+        },
+        "Terminate_Failed": {
+          "type": "Terminate",
+          "inputs": {
+            "runStatus": "Failed"
+          },
+          "runAfter": {
+            "Send_Failure_Email": [
+              "Succeeded",
+              "Failed",
+              "Skipped",
+              "TimedOut"
+            ]
+          }
+        }
+      },
+      "runAfter": {
+        "Try_Scope": [
+          "Failed",
+          "TimedOut"
+        ]
+      }
+    }
+  }
+}
+
