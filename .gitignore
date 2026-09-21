@@ -6,8 +6,9 @@ obj/
 # Local deployment output
 *.parameters.local.json
 *.bicepparam
+function/ai-foundry/
+function/shared/
 
 # OS/editor files
 .DS_Store
 Thumbs.db
-

@@ -1,0 +1,5 @@
+interface:
+  display_name: AIRL Pulse Report
+  short_description: Generate KF-style AI-Ready Leader client insight reports from assessment workbooks.
+  icon: chart-bar
+  accent_color: '#00634f'

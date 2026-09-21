@@ -6,9 +6,9 @@ param reportContainerName string
 param pipelineEndpoint string
 param pipelineName string
 param pipelineAudience string
-param batchEndpoint string
-param batchName string
-param batchAudience string
+param reportFunctionBaseUrl string
+param reportFunctionAudience string
+param clientSlugs array
 
 resource logicApp 'Microsoft.Logic/workflows@2019-05-01' = {
   name: logicAppName
@@ -38,14 +38,14 @@ resource logicApp 'Microsoft.Logic/workflows@2019-05-01' = {
       pipelineAudience: {
         value: pipelineAudience
       }
-      batchEndpoint: {
-        value: batchEndpoint
+      reportFunctionBaseUrl: {
+        value: reportFunctionBaseUrl
       }
-      batchName: {
-        value: batchName
+      reportFunctionAudience: {
+        value: reportFunctionAudience
       }
-      batchAudience: {
-        value: batchAudience
+      clientSlugs: {
+        value: clientSlugs
       }
     }
   }
@@ -53,4 +53,3 @@ resource logicApp 'Microsoft.Logic/workflows@2019-05-01' = {
 
 output logicAppName string = logicApp.name
 output logicAppPrincipalId string = logicApp.identity.principalId
-

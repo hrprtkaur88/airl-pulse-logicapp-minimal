@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "source_name": "TopQuartile WE_AIRL Score.xlsx",
+  "benchmarks": {
+    "overall": {
+      "id": "overall",
+      "label": "Overall Benchmark",
+      "short_label": "Overall",
+      "participant_count_approx": 340000,
+      "organization_count_approx": 3000,
+      "population_description": "Average AI-Ready Leader results across Korn Ferry Assess, global and cross-industry.",
+      "methodology_note": "",
+      "footnote_context": "The Overall Benchmark reflects average AI-Ready Leader results from approximately 340,000 participants across 3,000 organizations in Korn Ferry's global, cross-industry assessment database."
+    },
+    "high_engagement": {
+      "id": "high_engagement",
+      "label": "High Engagement Benchmark",
+      "short_label": "High Engagement",
+      "participant_count_approx": 60000,
+      "organization_count_approx": 2000,
+      "population_description": "AI-Ready Leader results for the top 25% of participants on Work Engagement.",
+      "methodology_note": "Work Engagement is used as a proxy for job performance and reflects satisfaction, emotional investment, and willingness to expend discretionary effort for the organization.",
+      "selection_rule": "Top 25% of participants on Work Engagement",
+      "values": {
+        "overall": 58.3275063973137,
+        "composites": {
+          "Address Fears": 69.55693623956,
+          "Champion Learning and Unlearning": 54.1630639162241,
+          "Don't Stop at Success": 53.4798329598696,
+          "Scale for Impact": 61.8170706864836,
+          "Sustain the Vision": 52.5165682080511,
+          "Take Decisive Action": 57.575881034834
+        },
+        "constructs": {
+          "Composure": 65.9797422489398,
+          "Courage": 63.1073495877916,
+          "Credibility": 79.8390085230782,
+          "Instills Trust": 69.5075425363971,
+          "Adaptability": 50.7740766665294,
+          "Persistence": 65.8726890929304,
+          "Structure": 45.5698360935269,
+          "Balance": 40.3009570091864,
+          "Cultivates Innovation": 55.6766356779512,
+          "Curiosity": 56.6352369580434,
+          "Global Perspective": 62.0636730398176,
+          "Directs Work": 70.3253815120154,
+          "Drives Results": 60.6099807051395,
+          "Ensures Accountability": 66.1155937554815,
+          "Plans And Aligns": 66.9071215576215,
+          "Tolerance Of Ambiguity": 49.2938609132458,
+          "Being Resilient": 60.7130328012629,
+          "Challenge": 36.4537374512437,
+          "Confidence": 52.1163585457241,
+          "Influence": 56.5549470910364,
+          "Strategic Mindset": 58.2134713208209,
+          "Action Oriented": 58.2967900368356,
+          "Builds Effective Teams": 59.0335028942291,
+          "Collaborates": 67.7731976846167,
+          "Need For Achievement": 48.5362539630255
+        }
+      },
+      "footnote_context": "The High Engagement Benchmark reflects AI-Ready Leader results from approximately 60,000 participants across 2,000 organizations in the top 25% on Work Engagement. High engagement provides a useful aspirational comparison because it reflects leaders who are more strongly connected to their work and organization. Comparing with this population helps indicate whether the client's leadership profile resembles patterns seen among more highly engaged assessed individuals. Work Engagement reflects satisfaction, emotional investment, and willingness to expend discretionary effort for the organization and is used here as a proxy for job performance."
+    }
+  }
+}

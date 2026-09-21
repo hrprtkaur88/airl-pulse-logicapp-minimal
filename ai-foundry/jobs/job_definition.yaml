@@ -1,0 +1,35 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+display_name: airl-pulse-report-batch
+description: >-
+  Runs the AIRL Pulse Report batch for one month. Iterates client AIRL
+  assessment workbooks (.xlsx) discovered in Blob 'data' and produces
+  per-client client-ready HTML reports in Blob 'report' by running each
+  workbook through the real airl-pulse-report skill pipeline (validate ->
+  build content model -> LLM narrative draft -> lint/validate -> render).
+# NOT CURRENTLY DEPLOYABLE against aif-scout-wus3 / aif-scout-hub-wus3: those
+# are Foundry-kind (Hub/Project) Azure ML workspaces, and AmlCompute is not a
+# supported compute type on Hub or Project kind workspaces (confirmed live via
+# `az ml compute create --type AmlCompute`, which fails on both with "Current
+# operation is not supported on {Hub|Project} workspace ... for compute type
+# AmlCompute"). Production report generation runs on ../function/ (an Azure
+# Function) instead -- see ../function/README.md. This file is kept for a
+# future classic (non-Foundry-kind) Azure ML workspace, where `compute:`
+# below would need to point at a real AmlCompute cluster name in that
+# workspace.
+compute: azureml:cpu-cluster-airl
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04:latest
+  conda_file: conda.yaml
+code: ../../
+command: >-
+  python ai-foundry/jobs/run_batch.py --run-month ${{inputs.run_month}}
+inputs:
+  run_month:
+    type: string
+    default: "092026"
+identity:
+  type: managed_identity
+tags:
+  project: airl-pulse-report
+  step: "3"

@@ -9,6 +9,9 @@ param resourceGroupName string
 @description('Logic App Consumption workflow name.')
 param logicAppName string = 'logic-airl-minimal'
 
+@description('Azure Function App name that hosts function/function_app.py. The Function App infrastructure is assumed to exist.')
+param reportFunctionAppName string
+
 @description('Existing storage account used by the pipeline and batch process.')
 param storageAccountName string
 
@@ -27,14 +30,25 @@ param pipelineName string
 @description('Managed Identity token audience for the pipeline API.')
 param pipelineAudience string = 'https://dev.azuresynapse.net/'
 
-@description('Batch/report-generation API base endpoint without a trailing slash.')
-param batchEndpoint string
+@description('Base URL of the report-generation Function App, including /api when using the default Azure Functions route prefix.')
+param reportFunctionBaseUrl string
 
-@description('Batch route or operation name appended to batchEndpoint.')
-param batchName string
+@description('Managed Identity token audience for the report-generation Function App.')
+param reportFunctionAudience string
 
-@description('Managed Identity token audience for the batch API.')
-param batchAudience string
+@description('Client slugs to generate reports for after the pipeline succeeds.')
+param clientSlugs array = [
+  'acme-corp'
+  'globex-labs'
+  'initech-systems'
+  'umbrella-health'
+  'stark-industries'
+  'wayne-enterprises'
+  'soylent-foods'
+  'tyrell-robotics'
+  'cyberdyne-io'
+  'pied-piper'
+]
 
 resource rg 'Microsoft.Resources/resourceGroups@2024-11-01' = {
   name: resourceGroupName
@@ -53,12 +67,12 @@ module logicapp 'logicapp.bicep' = {
     pipelineEndpoint: pipelineEndpoint
     pipelineName: pipelineName
     pipelineAudience: pipelineAudience
-    batchEndpoint: batchEndpoint
-    batchName: batchName
-    batchAudience: batchAudience
+    reportFunctionBaseUrl: reportFunctionBaseUrl
+    reportFunctionAudience: reportFunctionAudience
+    clientSlugs: clientSlugs
   }
 }
 
 output logicAppName string = logicapp.outputs.logicAppName
 output logicAppPrincipalId string = logicapp.outputs.logicAppPrincipalId
-
+output reportFunctionAppName string = reportFunctionAppName

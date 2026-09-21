@@ -23,14 +23,26 @@
       "type": "string",
       "defaultValue": "https://dev.azuresynapse.net/"
     },
-    "batchEndpoint": {
+    "reportFunctionBaseUrl": {
       "type": "string"
     },
-    "batchName": {
+    "reportFunctionAudience": {
       "type": "string"
     },
-    "batchAudience": {
-      "type": "string"
+    "clientSlugs": {
+      "type": "array",
+      "defaultValue": [
+        "acme-corp",
+        "globex-labs",
+        "initech-systems",
+        "umbrella-health",
+        "stark-industries",
+        "wayne-enterprises",
+        "soylent-foods",
+        "tyrell-robotics",
+        "cyberdyne-io",
+        "pied-piper"
+      ]
     }
   },
   "triggers": {
@@ -146,31 +158,43 @@
         ]
       },
       "actions": {
-        "Step_2_Start_Batch_MSI": {
-          "type": "Http",
-          "inputs": {
-            "method": "POST",
-            "uri": "@{concat(parameters('batchEndpoint'), '/', parameters('batchName'))}",
-            "authentication": {
-              "type": "ManagedServiceIdentity",
-              "audience": "@parameters('batchAudience')"
-            },
-            "body": {
-              "runMonth": "@variables('runMonth')",
-              "pipelineRunId": "@body('Step_1_Run_Pipeline_MSI')?['runId']",
-              "storageAccountName": "@parameters('storageAccountName')",
-              "dataContainerName": "@parameters('dataContainerName')",
-              "reportContainerName": "@parameters('reportContainerName')"
-            },
-            "retryPolicy": {
-              "type": "exponential",
-              "count": 3,
-              "interval": "PT30S",
-              "maximumInterval": "PT10M"
+        "Step_2_Generate_Reports_MSI": {
+          "type": "Foreach",
+          "foreach": "@parameters('clientSlugs')",
+          "runtimeConfiguration": {
+            "concurrency": {
+              "repetitions": 2
             }
           },
-          "limit": {
-            "timeout": "PT9M"
+          "actions": {
+            "Generate_Report": {
+              "type": "Http",
+              "inputs": {
+                "method": "POST",
+                "uri": "@{concat(parameters('reportFunctionBaseUrl'), '/report-generation/generate-report/', items('Step_2_Generate_Reports_MSI'), '?runMonth=', variables('runMonth'))}",
+                "authentication": {
+                  "type": "ManagedServiceIdentity",
+                  "audience": "@parameters('reportFunctionAudience')"
+                },
+                "body": {
+                  "runMonth": "@variables('runMonth')",
+                  "pipelineRunId": "@body('Step_1_Run_Pipeline_MSI')?['runId']",
+                  "storageAccountName": "@parameters('storageAccountName')",
+                  "dataContainerName": "@parameters('dataContainerName')",
+                  "reportContainerName": "@parameters('reportContainerName')"
+                },
+                "retryPolicy": {
+                  "type": "exponential",
+                  "count": 3,
+                  "interval": "PT30S",
+                  "maximumInterval": "PT10M"
+                }
+              },
+              "limit": {
+                "timeout": "PT9M"
+              },
+              "runAfter": {}
+            }
           },
           "runAfter": {}
         }
@@ -198,4 +222,3 @@
     }
   }
 }
-
