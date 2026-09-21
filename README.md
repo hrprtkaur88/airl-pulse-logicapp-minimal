@@ -7,6 +7,9 @@ Minimal implementation for the AIRL monthly flow through report generation. This
 3. Reading generated workbooks from Blob Storage.
 4. Running the AIRL report-generation pipeline.
 5. Writing generated HTML reports and status manifests to Blob Storage.
+6. Hosting the Entra-protected report portal.
+7. Querying authorized recipients from the web app.
+8. Sending report-ready email fan-out through Logic App.
 
 The pipeline is expected to write source artifacts to the configured `data` blob container. The Function reads those workbooks, runs the copied `ai-foundry/jobs/run_batch.py` pipeline and `ai-foundry/skill` scripts, then writes reports to the configured `report` blob container.
 
@@ -19,19 +22,30 @@ See [`docs/architecture.md`](docs/architecture.md) for the simplified architectu
 ```text
 docs/
   architecture.md  # simplified architecture diagram and readout
+webapp/
+  AirlPulseReport.Web.csproj
+  Program.cs       # Entra auth, admin JWT gate, /admin/list-users, /report/latest
+  Pages/           # portal and unauthorized pages
+  Services/        # Cosmos directory lookup and Blob report proxy
 infra/
   main.bicep       # subscription-scope deployment entry point
   logicapp.bicep   # Logic App Consumption workflow resource
   workflow.json    # Logic App workflow definition
+logicapp/
+  webapp-directory-email-portal/
+    workflow.json  # query users via web app and fan out email
 function/
   function_app.py   # Azure Function HTTP endpoint for report generation
   host.json
   requirements.txt
+cosmos/
+  schema.md         # reporting.users document contract
 ai-foundry/
   jobs/             # report-generation orchestrator copied from source repo
   skill/            # AIRL skill scripts/references/assets needed to render HTML
 shared/
   naming.py         # shared blob path rules
+  naming.cs         # shared web app slug/blob-path rules
 README.md
 .gitignore
 ```
@@ -45,6 +59,9 @@ This repo does not create the storage account, blob containers, Synapse/Data Fac
 - Pipeline endpoint and pipeline name.
 - Pipeline Managed Identity audience.
 - Existing Azure Function App where `function/` is deployed.
+- Existing App Service or deployment target for the ASP.NET Core `webapp/`.
+- Existing Cosmos DB `reporting.users` directory.
+- Existing Office 365 Logic App API connection for fan-out email.
 - Report Function Managed Identity audience.
 - Azure OpenAI endpoint and deployment settings on the Function App.
 
@@ -60,6 +77,41 @@ The deployed Logic App uses a system-assigned managed identity. Grant that princ
   - Storage Blob Data Contributor on the storage account so it can read `data` and write `report`.
   - Cognitive Services OpenAI User on the Azure OpenAI account.
 - Storage access for the pipeline identity so it can write workbooks into `data`.
+- Web App managed identity:
+  - Cosmos DB data-plane permission to read `reporting.users`.
+  - Storage Blob Data Reader or Contributor on the `report` container so `/report/latest` can stream reports.
+- Logic App managed identity:
+  - Include its object ID in the web app `Admin__AllowedPrincipalIds` setting so it can call `/admin/list-users`.
+
+## Web App behavior
+
+The `webapp/` project provides:
+
+- Entra sign-in for end users.
+- `/admin/list-users` for Logic App recipient lookup.
+- `/report/latest` to proxy the signed-in user's latest report from the `report` container.
+- `/Unauthorized` for signed-in users who are not present in Cosmos DB.
+- Security headers and a sandboxed CSP for streamed report HTML.
+
+The web app never exposes direct Blob URLs or SAS URLs. It resolves the signed-in user through Cosmos DB and computes the report blob path server-side.
+
+## Web App settings
+
+Configure these settings on the App Service:
+
+| Setting | Description |
+|---|---|
+| `AzureAd__TenantId` | Entra tenant ID. |
+| `AzureAd__ClientId` | App registration client ID. |
+| `AzureAd__ClientSecret` | Web app sign-in secret or Key Vault reference if required by the chosen Entra setup. Do not commit it. |
+| `Admin__AllowedPrincipalIds` | Comma-separated object IDs allowed to call `/admin/*`, usually the Logic App MSI principal ID. |
+| `Cosmos__Endpoint` | Cosmos DB SQL endpoint. |
+| `Cosmos__Database` | Usually `reporting`. |
+| `Cosmos__UsersContainer` | Usually `users`. |
+| `Storage__Account` | Existing Storage Account. |
+| `Storage__ReportContainer` | Usually `report`. |
+| `ApplicationInsights__ConnectionString` | Optional telemetry. |
+| `Support__Email` | Address shown on the Unauthorized page. |
 
 ## Function App settings
 
@@ -148,6 +200,31 @@ report/<slug>/report-file-latest.html
 report/<slug>/report-file-<DDMMYYYY>.html
 report/<slug>/status-<MMYYYY>.json
 ```
+
+## Deploy Web App code
+
+From the repository root:
+
+```powershell
+dotnet publish .\webapp\AirlPulseReport.Web.csproj -c Release -o .\artifacts\webapp
+```
+
+Deploy the published output to the existing App Service using your preferred deployment method. The App Service must be configured with the Web App settings listed above and with managed identity access to Cosmos DB and Blob Storage.
+
+## Email fan-out workflow
+
+The branch includes a focused Logic App workflow at:
+
+```text
+logicapp/webapp-directory-email-portal/workflow.json
+```
+
+It:
+
+1. Calls `GET /admin/list-users` on the web app using Managed Identity.
+2. Iterates over returned users.
+3. Sends one report-ready email per user using the Office 365 connector.
+4. Sends failure notifications to `supportEmail`.
 
 ## Notes
 

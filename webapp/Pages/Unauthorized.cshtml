@@ -1,0 +1,12 @@
+@page
+@model UnauthorizedModel
+@{
+    ViewData["Title"] = "Not authorized";
+    Response.StatusCode = 403;
+}
+
+<div class="text-center">
+    <h1 class="display-4 text-danger">403 · Not authorized</h1>
+    <p class="lead">Your account is not registered for any AIRL Pulse Report client.</p>
+    <p>If you believe this is a mistake, please contact <a href="mailto:@Model.SupportEmail">@Model.SupportEmail</a>.</p>
+</div>

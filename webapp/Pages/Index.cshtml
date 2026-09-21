@@ -1,0 +1,31 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "AIRL Pulse Report Portal";
+}
+
+<div class="text-center">
+    <h1 class="display-4">AIRL Pulse Report</h1>
+
+    @if (Model.SignedInUser is not null)
+    {
+        <p class="lead">Welcome, <strong>@Model.SignedInUser.UserName</strong> — @Model.SignedInUser.ClientName.</p>
+
+        @if (Model.ReportAvailable)
+        {
+            <a class="btn btn-primary btn-lg mt-3"
+               href="/report/latest"
+               target="_blank" rel="noopener noreferrer">
+                View Latest Report
+            </a>
+            <p class="text-muted mt-3"><small>Served via a signed-in proxy from Blob Storage.</small></p>
+        }
+        else
+        {
+            <div class="alert alert-warning mt-3">
+                No report is available yet for <strong>@Model.SignedInUser.ClientName</strong>.
+                Please check back after the next monthly run.
+            </div>
+        }
+    }
+</div>
