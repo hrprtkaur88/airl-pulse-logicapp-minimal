@@ -1,24 +1,54 @@
 # Simplified Architecture
 
-This repository contains the simplified report-generation portion of the AIRL Pulse Report monthly flow. It assumes the surrounding Azure infrastructure already exists.
+This repository contains the simplified AIRL Pulse Report monthly flow. It assumes the surrounding Azure infrastructure already exists.
 
-The scope is intentionally smaller than the full end-to-end architecture: it covers orchestration, pipeline start, report generation with Azure OpenAI, and writing generated reports to Blob Storage.
+The scope is intentionally smaller than the full end-to-end architecture: it covers orchestration, pipeline start, report generation with Azure OpenAI, writing generated reports to Blob Storage, querying the authorization directory, sending report-ready emails, and serving the portal.
 
 ```mermaid
-flowchart LR
-    LA["Logic App<br/>Monthly Orchestration<br/>(System-assigned MSI)"]
-    PIPE["Existing Synapse/Data Factory Pipeline<br/>Generate AIRL Workbooks"]
-    DATA[("Storage Account<br/>data container<br/>assessment-workbook-MMYYYY.xlsx")]
-    FUNC["Existing Azure Function App<br/>/api/report-generation/generate-report/{slug}<br/>(System-assigned MSI)"]
-    OAI["Azure OpenAI<br/>gpt-4o"]
-    REPORT[("Storage Account<br/>report container<br/>report-file-latest.html<br/>report-file-DDMMYYYY.html<br/>status-MMYYYY.json")]
+flowchart TB
+    subgraph ORCH["Orchestration"]
+        LA["Logic App<br/>Monthly Orchestration<br/>(System-assigned MSI)"]
+    end
+
+    subgraph DATAFLOW["Data Generation and Report Generation"]
+        PIPE["Existing Synapse/Data Factory Pipeline<br/>Generate AIRL Workbooks"]
+        FUNC["Azure Function App<br/>/api/report-generation/generate-report/{slug}<br/>(System-assigned MSI)"]
+        OAI["Azure OpenAI<br/>gpt-4o"]
+    end
+
+    subgraph STORAGE["Storage"]
+        DATA[("data container<br/>assessment-workbook-MMYYYY.xlsx")]
+        REPORT[("report container<br/>report-file-latest.html<br/>report-file-DDMMYYYY.html<br/>status-MMYYYY.json")]
+    end
+
+    subgraph AUTH["Authorization and Directory"]
+        COSMOS[("Cosmos DB<br/>reporting.users<br/>pk: /client_id")]
+    end
+
+    subgraph PORTAL["Portal"]
+        WEB["ASP.NET Core Web App<br/>Entra sign-in<br/>/admin/list-users<br/>/report/latest"]
+        USER["End users"]
+    end
+
+    subgraph NOTIFY["Notification"]
+        EMAIL["Office 365 Outlook<br/>managed connector"]
+        SUPPORT["Support email<br/>failure only"]
+    end
 
     LA -- "1. Run pipeline via MSI" --> PIPE
-    PIPE -- "2. Write per-client workbooks" --> DATA
-    LA -- "3. Call report Function per client via MSI" --> FUNC
+    PIPE -- "2. Write workbooks" --> DATA
+    LA -- "3. Generate reports per client via MSI" --> FUNC
     FUNC -- "4. Read workbook" --> DATA
     FUNC -- "5. Generate narrative" --> OAI
     FUNC -- "6. Write HTML report + status" --> REPORT
+    LA -- "7. Query users via Web App MSI" --> WEB
+    WEB -- "Read authorized recipients" --> COSMOS
+    LA -- "8. Fan out report-ready email" --> EMAIL
+    EMAIL -- "Portal link" --> USER
+    USER -- "Sign in with Entra" --> WEB
+    WEB -- "Lookup signed-in email" --> COSMOS
+    WEB -- "Proxy authorized latest report" --> REPORT
+    LA -. "On failure" .-> SUPPORT
 ```
 
 ## Component responsibilities
@@ -31,6 +61,9 @@ flowchart LR
 | Azure OpenAI | Generates the report narrative used by the AIRL report renderer. |
 | Storage `data` container | Holds generated workbook input files. |
 | Storage `report` container | Holds generated HTML reports and status manifests. |
+| ASP.NET Core Web App | Provides the Entra-protected portal, `/admin/list-users` for Logic App fan-out, and `/report/latest` secure report proxy. |
+| Cosmos DB `reporting.users` | Authorization and recipient directory keyed by client slug. |
+| Office 365 connector | Sends report-ready email notifications to authorized recipients. |
 
 ## Input and output paths
 
@@ -52,10 +85,20 @@ report/<client-slug>/status-<MMYYYY>.json
 
 - Logic App calls the pipeline using Managed Identity.
 - Logic App calls the report Function using Managed Identity.
+- Logic App calls the web app `/admin/list-users` endpoint using Managed Identity.
 - The report Function validates the Logic App caller using Entra ID token audience and allow-listed principal ID.
 - The report Function uses its own Managed Identity to access Blob Storage and Azure OpenAI.
+- The web app validates the Logic App caller for `/admin/*` using Entra ID token audience and allow-listed principal ID.
+- End users authenticate to the portal with Entra ID.
+- The portal maps signed-in user email to Cosmos DB `reporting.users` before streaming a report.
 
-## Out of scope for this minimal repo
+## Web app and portal paths
 
-The full architecture also includes a user portal, Authorization & Directory, email fan-out, observability, Key Vault, and private endpoint topology. Those are not included here except where existing infrastructure values are passed into this report-generation flow.
+- `GET /admin/list-users` returns only recipient fan-out fields.
+- `GET /` shows the signed-in user's portal landing page.
+- `GET /report/latest` streams the signed-in user's latest client report from Blob Storage.
+- `GET /Unauthorized` returns 403 when the signed-in user is not in the directory.
 
+## Out of scope for this branch
+
+The branch assumes Azure resource creation, private endpoint topology, Key Vault, App Insights, and Office 365 connection authorization already exist or are managed by the consuming environment.
