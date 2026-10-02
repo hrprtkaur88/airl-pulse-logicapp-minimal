@@ -9,7 +9,7 @@ This package contains the Logic App portion for querying report recipients from 
 | Portal shell and pages | `webapp/Pages/Index.cshtml`, `webapp/Pages/Index.cshtml.cs`, `webapp/Pages/Shared/_Layout.cshtml` |
 | Unauthorized user handling | `webapp/Pages/Unauthorized.cshtml`, `webapp/Pages/Unauthorized.cshtml.cs` |
 | Entra sign-in, admin JWT gate, security headers, `/report/latest`, `/admin/list-users` | `webapp/Program.cs` |
-| Authorization & Directory lookup | `webapp/Services/CosmosUserService.cs`, `cosmos/schema.md` |
+| Authorization & Directory lookup | `webapp/Services/GroupAccessService.cs`, `webapp/Services/ClientDirectoryService.cs`, `webapp/Services/CosmosUserService.cs`, `docs/cosmos-schema.md`, `cosmos/schema.md` |
 | Secure report proxy from Blob Storage | `webapp/Services/BlobReportService.cs` |
 | Shared client slug/blob-path rules | `shared/naming.cs` |
 | Email fan-out workflow | `logicapp/webapp-directory-email-portal/workflow.json` |
@@ -39,7 +39,7 @@ This package contains the Logic App portion for querying report recipients from 
 5. The Logic App fans out one email per returned user using the Office 365 connector.
 6. The email links to the portal URL.
 7. The user signs in with Entra ID.
-8. The portal looks up the signed-in email in Cosmos and streams only that user's client report from:
+8. The portal resolves the signed-in user's Entra security-group membership against Cosmos `reporting.group_access`, reads report history from `reporting.clients`, and streams only authorized client reports from:
 
    ```text
    report/<client-slug>/report-file-latest.html
@@ -62,8 +62,11 @@ Configure the web app with existing infrastructure values:
 | `Cosmos__Endpoint` | Cosmos DB SQL endpoint. |
 | `Cosmos__Database` | Usually `reporting`. |
 | `Cosmos__UsersContainer` | Usually `users`. |
+| `Cosmos__GroupAccessContainer` | Usually `group_access`. |
+| `Cosmos__ClientsContainer` | Usually `clients`. |
 | `Storage__Account` | Existing Storage Account containing reports. |
 | `Storage__ReportContainer` | Usually `report`. |
+| `Storage__DataContainer` | Usually `data`. |
 | `ApplicationInsights__ConnectionString` | Optional telemetry. |
 | `Support__Email` | Address shown on the Unauthorized page. |
 
@@ -71,8 +74,8 @@ Configure the web app with existing infrastructure values:
 
 Grant the web app system-assigned managed identity:
 
-- Cosmos DB built-in data contributor or equivalent data-plane role on `reporting.users`.
-- Storage Blob Data Reader or Contributor on the Storage Account/report container.
+- Cosmos DB built-in data contributor or equivalent data-plane role on `reporting.users`, `reporting.group_access`, and `reporting.clients`.
+- Storage Blob Data Reader or Contributor on the Storage Account `data` and `report` containers.
 
 Grant the Logic App system-assigned managed identity:
 
@@ -97,7 +100,5 @@ From the repository root:
 
 ```powershell
 dotnet build .\webapp\AirlPulseReport.Web.csproj -c Release --no-restore
-dotnet test .\tests\webapp.unit\AirlPulseReport.Web.Tests.csproj -c Release --no-restore
 Get-Content .\logicapp\webapp-directory-email-portal\workflow.json -Raw | ConvertFrom-Json | Out-Null
 ```
-

@@ -1,6 +1,6 @@
 # Cosmos DB Schema
 
-**Account** (dev): `cos-scout-pi2dl-wus3` (from `config.json`)
+**Account:** customer Cosmos DB SQL account
 **Database:** `reporting`
 **Container:** `users`
 **Partition key:** `/client_id`
