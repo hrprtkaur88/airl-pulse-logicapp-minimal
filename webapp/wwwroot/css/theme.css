@@ -1,0 +1,239 @@
+/* AI Ready Leader Insights -- Korn Ferry brand theme
+   ---------------------------------------------------------------
+   Bootstrap 5.3 is loaded precompiled from a CDN (no local Sass build
+   step in this project). Its compiled CSS sets each component's colors
+   as LOCAL CSS custom properties on that component's own selector (e.g.
+   .btn-primary{--bs-btn-bg:#0d6efd;...}) rather than referencing the
+   global --bs-primary token, so redefining --bs-primary at :root does
+   NOT recolor .btn-primary from a stock CDN build. Bootstrap 5.3's
+   actual, documented theming mechanism for this situation is to
+   override those same *local* component tokens (--bs-btn-bg,
+   --bs-nav-link-color, --bs-pagination-active-bg, --bs-table-*, etc.)
+   directly on the component selector -- exactly what this file does.
+   This keeps every override aligned with the framework's own variable
+   contract (rather than hand-fighting specificity with background-color
+   overrides), so new markup that reuses a standard Bootstrap class
+   inherits the correct theme automatically with no per-page CSS needed.
+
+   Palette approximates Korn Ferry's public brand identity: black/
+   near-black surfaces, white content areas, and a signature deep red
+   accent. No Korn Ferry logo image asset is used (none was supplied)
+   -- brand presence here is the color palette plus a text wordmark in
+   the navbar (see _Layout.cshtml).
+
+   ============================ CONVENTIONS ============================
+   To keep every page/tab visually consistent, use ONLY these patterns
+   for new UI -- do not invent one-off classes or sizes:
+     - Primary / "do the main thing" action  -> class="btn btn-primary"
+       (Add, Save, Switch, View, Submit, ...)
+     - Neutral / secondary action            -> class="btn btn-outline-dark"
+       (Sync from storage, Cancel, ...)
+     - Destructive action                    -> class="btn btn-outline-danger"
+       (Remove, Delete, ...)
+     - Never use the "-sm" (small) button/input/table/pagination variants
+       outside the navbar -- the navbar's Sign in/out button is the one
+       intentional exception (compact controls are a normal convention
+       for a slim dark navbar). Everywhere else, use the regular size so
+       controls match across tabs and pages.
+     - Every content section on an admin/management page lives inside a
+       Bootstrap .card with a .card-header whose text matches the
+       section/tab title -- never bare content directly on the page
+       background.
+   ====================================================================== */
+
+:root {
+    --kf-black: #1a1a1a;
+    --kf-red: #e4002b;
+    --kf-red-dark: #b8001f;
+    --kf-gray: #6c757d;
+    --kf-gray-light: #f5f5f5;
+    --kf-border: #e0e0e0;
+
+    /* Bootstrap's own global tokens -- these ARE read at runtime by
+       several components (links, code, focus rings), so setting them
+       here is enough; no per-component override needed for those. */
+    --bs-link-color: var(--kf-red-dark);
+    --bs-link-color-rgb: 184, 0, 31;
+    --bs-link-hover-color: var(--kf-red);
+    --bs-link-hover-color-rgb: 228, 0, 43;
+    --bs-code-color: var(--kf-red-dark);
+    --bs-focus-ring-color: rgba(228, 0, 43, .25);
+}
+
+body {
+    background-color: var(--kf-gray-light);
+    color: var(--kf-black);
+}
+
+/* --- Navbar / brand -------------------------------------------------- */
+.navbar.kf-navbar {
+    background-color: var(--kf-black) !important;
+    border-bottom: 3px solid var(--kf-red);
+}
+
+.kf-wordmark {
+    display: inline-flex;
+    align-items: baseline;
+    gap: .5rem;
+    color: #fff !important;
+    text-decoration: none;
+}
+
+.kf-wordmark .kf-brand {
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    font-size: 1.1rem;
+}
+
+.kf-wordmark .kf-brand .kf-accent {
+    color: var(--kf-red);
+}
+
+.kf-wordmark .kf-product {
+    font-size: .85rem;
+    font-weight: 400;
+    color: #cfcfcf;
+    border-left: 1px solid #555;
+    padding-left: .5rem;
+}
+
+/* --- Headings ---------------------------------------------------------- */
+h1.display-4 {
+    font-weight: 700;
+    color: var(--kf-black);
+}
+
+/* --- Buttons: override Bootstrap's own local per-component tokens ------ */
+.btn-primary {
+    --bs-btn-color: #fff;
+    --bs-btn-bg: var(--kf-red);
+    --bs-btn-border-color: var(--kf-red);
+    --bs-btn-hover-color: #fff;
+    --bs-btn-hover-bg: var(--kf-red-dark);
+    --bs-btn-hover-border-color: var(--kf-red-dark);
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: var(--kf-red-dark);
+    --bs-btn-active-border-color: var(--kf-red-dark);
+    --bs-btn-disabled-bg: var(--kf-red);
+    --bs-btn-disabled-border-color: var(--kf-red);
+    --bs-btn-focus-shadow-rgb: 228, 0, 43;
+}
+
+.btn-outline-dark {
+    --bs-btn-color: var(--kf-black);
+    --bs-btn-border-color: #9a9a9a;
+    --bs-btn-hover-color: #fff;
+    --bs-btn-hover-bg: var(--kf-black);
+    --bs-btn-hover-border-color: var(--kf-black);
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: var(--kf-black);
+    --bs-btn-active-border-color: var(--kf-black);
+    --bs-btn-focus-shadow-rgb: 26, 26, 26;
+}
+
+.btn-outline-danger {
+    --bs-btn-color: var(--kf-red-dark);
+    --bs-btn-border-color: var(--kf-red-dark);
+    --bs-btn-hover-color: #fff;
+    --bs-btn-hover-bg: var(--kf-red);
+    --bs-btn-hover-border-color: var(--kf-red);
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: var(--kf-red);
+    --bs-btn-active-border-color: var(--kf-red);
+    --bs-btn-focus-shadow-rgb: 228, 0, 43;
+}
+
+.btn-outline-light {
+    --bs-btn-hover-color: var(--kf-black);
+}
+
+/* --- Badges --------------------------------------------------------- */
+.badge.bg-primary {
+    background-color: var(--kf-red) !important;
+}
+
+/* --- Nav tabs (Manage Access) ---------------------------------------- */
+.nav-tabs {
+    --bs-nav-tabs-border-color: var(--kf-border);
+    --bs-nav-tabs-link-hover-border-color: transparent transparent var(--kf-border);
+    --bs-nav-tabs-link-active-color: var(--kf-black);
+    --bs-nav-tabs-link-active-bg: transparent;
+    --bs-nav-tabs-link-active-border-color: transparent transparent var(--kf-red);
+}
+.nav-tabs .nav-link {
+    color: var(--kf-gray);
+    border: none;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    font-weight: 500;
+}
+.nav-tabs .nav-link.active {
+    font-weight: 700;
+    border-bottom-width: 3px;
+}
+
+/* --- Pagination -------------------------------------------------------- */
+.pagination {
+    --bs-pagination-color: var(--kf-red-dark);
+    --bs-pagination-hover-color: var(--kf-red);
+    --bs-pagination-active-bg: var(--kf-red);
+    --bs-pagination-active-border-color: var(--kf-red);
+    --bs-pagination-focus-color: var(--kf-red);
+    --bs-pagination-focus-box-shadow: 0 0 0 .2rem rgba(228, 0, 43, .2);
+}
+
+/* --- Cards / tables ------------------------------------------------- */
+.card {
+    border-color: var(--kf-border);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .06);
+}
+.card-header {
+    background-color: #fff;
+    border-bottom: 1px solid var(--kf-border);
+    font-weight: 600;
+    /* Flex + min-height keeps the header title vertically centered at the
+       same height whether or not the header also holds an action button
+       (e.g. Client Directory's "Sync from storage") -- without this,
+       a header with a button renders taller than a title-only header on
+       another tab, visibly misaligning the two. */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 54px;
+}
+.table {
+    --bs-table-color: var(--kf-black);
+}
+.table thead th {
+    background-color: var(--kf-black);
+    color: #fff;
+    text-transform: uppercase;
+    font-size: .75rem;
+    letter-spacing: .05em;
+    font-weight: 600;
+    vertical-align: middle;
+    border-bottom: none;
+    padding-top: .65rem;
+    padding-bottom: .65rem;
+}
+.table > :not(caption) > * > th {
+    box-shadow: none;
+}
+
+/* --- Forms ------------------------------------------------------------ */
+.form-label {
+    font-weight: 600;
+    font-size: .85rem;
+    color: var(--kf-black);
+}
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--kf-red);
+    box-shadow: 0 0 0 .2rem rgba(228, 0, 43, .15);
+}
+
+/* --- Alerts (keep semantic colors, just tighten radius for a cleaner look) */
+.alert {
+    border-radius: .25rem;
+}

@@ -21,12 +21,13 @@ See [`docs/architecture.md`](docs/architecture.md) for the simplified architectu
 
 ```text
 docs/
-  architecture.md  # simplified architecture diagram and readout
+  architecture.md     # simplified architecture diagram and readout
+  cosmos-schema.md    # group_access + clients schema for the web app portal
 webapp/
   AirlPulseReport.Web.csproj
-  Program.cs       # Entra auth, admin JWT gate, /admin/list-users, /report/latest
-  Pages/           # portal and unauthorized pages
-  Services/        # Cosmos directory lookup and Blob report proxy
+  Program.cs          # Entra auth, admin JWT gate, /admin/list-users, /report/latest, /report/view
+  Pages/              # portal, ManageAccess admin UI, and unauthorized pages
+  Services/           # group access, client directory, Cosmos lookup, and Blob report proxy
 infra/
   main.bicep       # subscription-scope deployment entry point
   logicapp.bicep   # Logic App Consumption workflow resource
@@ -60,7 +61,7 @@ This repo does not create the storage account, blob containers, Synapse/Data Fac
 - Pipeline Managed Identity audience.
 - Existing Azure Function App where `function/` is deployed.
 - Existing App Service or deployment target for the ASP.NET Core `webapp/`.
-- Existing Cosmos DB `reporting.users` directory.
+- Existing Cosmos DB `reporting.users`, `reporting.group_access`, and `reporting.clients` containers.
 - Existing Office 365 Logic App API connection for fan-out email.
 - Report Function Managed Identity audience.
 - Azure OpenAI endpoint and deployment settings on the Function App.
@@ -78,8 +79,8 @@ The deployed Logic App uses a system-assigned managed identity. Grant that princ
   - Cognitive Services OpenAI User on the Azure OpenAI account.
 - Storage access for the pipeline identity so it can write workbooks into `data`.
 - Web App managed identity:
-  - Cosmos DB data-plane permission to read `reporting.users`.
-  - Storage Blob Data Reader or Contributor on the `report` container so `/report/latest` can stream reports.
+  - Cosmos DB data-plane permission to read/write `reporting.group_access` and `reporting.clients`, and read `reporting.users` for email fan-out.
+  - Storage Blob Data Reader or Contributor on the `data` and `report` containers so `/ManageAccess` can sync clients and `/report/latest`/`/report/view` can stream reports.
 - Logic App managed identity:
   - Include its object ID in the web app `Admin__AllowedPrincipalIds` setting so it can call `/admin/list-users`.
 
@@ -88,12 +89,15 @@ The deployed Logic App uses a system-assigned managed identity. Grant that princ
 The `webapp/` project provides:
 
 - Entra sign-in for end users.
+- Group-based report authorization using the user's Entra `groups` claim and Cosmos DB `reporting.group_access`.
+- `/ManageAccess` admin portal for mapping Entra security groups to client companies and syncing the client directory from Blob Storage.
 - `/admin/list-users` for Logic App recipient lookup.
-- `/report/latest` to proxy the signed-in user's latest report from the `report` container.
-- `/Unauthorized` for signed-in users who are not present in Cosmos DB.
+- `/report/latest` and `/report/view` to proxy authorized report HTML from the `report` container.
+- Report history display backed by the Cosmos DB `reporting.clients` cached `report_files` array.
+- `/Unauthorized` for signed-in users who have no mapped client access.
 - Security headers and a sandboxed CSP for streamed report HTML.
 
-The web app never exposes direct Blob URLs or SAS URLs. It resolves the signed-in user through Cosmos DB and computes the report blob path server-side.
+The web app never exposes direct Blob URLs or SAS URLs. It resolves the signed-in user's accessible companies through Entra group membership and Cosmos DB, then computes report blob paths server-side.
 
 ## Web App settings
 
@@ -105,11 +109,15 @@ Configure these settings on the App Service:
 | `AzureAd__ClientId` | App registration client ID. |
 | `AzureAd__ClientSecret` | Web app sign-in secret or Key Vault reference if required by the chosen Entra setup. Do not commit it. |
 | `Admin__AllowedPrincipalIds` | Comma-separated object IDs allowed to call `/admin/*`, usually the Logic App MSI principal ID. |
+| `Admin__AdminGroupId` | Entra security group object ID whose members can access `/ManageAccess`. |
 | `Cosmos__Endpoint` | Cosmos DB SQL endpoint. |
 | `Cosmos__Database` | Usually `reporting`. |
 | `Cosmos__UsersContainer` | Usually `users`. |
+| `Cosmos__GroupAccessContainer` | Usually `group_access`. |
+| `Cosmos__ClientsContainer` | Usually `clients`. |
 | `Storage__Account` | Existing Storage Account. |
 | `Storage__ReportContainer` | Usually `report`. |
+| `Storage__DataContainer` | Usually `data`. Used by `/ManageAccess` client-directory sync. |
 | `ApplicationInsights__ConnectionString` | Optional telemetry. |
 | `Support__Email` | Address shown on the Unauthorized page. |
 

@@ -1,0 +1,257 @@
+@page
+@model ManageAccessModel
+@{
+    ViewData["Title"] = "Manage Report Access";
+}
+
+<h1>Manage Report Access</h1>
+
+@if (Model.StatusMessage is not null)
+{
+    <div class="alert @(Model.StatusIsError ? "alert-danger" : "alert-success")">@Model.StatusMessage</div>
+}
+
+<ul class="nav nav-tabs mb-3" id="manageAccessTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link @(Model.ActiveTab == 1 ? "active" : "")" id="directory-tab" data-bs-toggle="tab"
+                data-bs-target="#directory-pane" type="button" role="tab">Client Directory</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link @(Model.ActiveTab == 2 ? "active" : "")" id="mappings-tab" data-bs-toggle="tab"
+                data-bs-target="#mappings-pane" type="button" role="tab">Existing Mappings</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link @(Model.ActiveTab == 3 ? "active" : "")" id="add-tab" data-bs-toggle="tab"
+                data-bs-target="#add-pane" type="button" role="tab">Add New Mapping</button>
+    </li>
+</ul>
+
+<div class="tab-content" id="manageAccessTabContent">
+
+    <!-- Tab 1: Client Directory -->
+    <div class="tab-pane fade @(Model.ActiveTab == 1 ? "show active" : "")" id="directory-pane" role="tabpanel">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Client Directory</span>
+                <form method="post" asp-page-handler="SyncClients" class="mb-0">
+                    <button type="submit" class="btn btn-outline-dark">Sync from storage</button>
+                </form>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">
+                    The list of known companies below is discovered from the client folders in
+                    Blob Storage's <code>data</code> container — the same data Synapse's export
+                    pipeline and the monthly report batch job read. Click <strong>Sync from storage</strong>
+                    after a new client's first workbook has landed to add it here, and to refresh
+                    each company's report list on the home page. Suggested names are auto-derived
+                    from the folder name; correct them below if needed.
+                </p>
+                @if (Model.KnownClients.Count == 0)
+                {
+                    <p class="text-muted">No companies discovered yet — click "Sync from storage".</p>
+                }
+                else
+                {
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Client ID (storage folder)</th>
+                                <th>Display Name</th>
+                                <th>Reports</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var c in Model.PagedClients)
+                            {
+                                <tr>
+                                    <td><code>@c.ClientId</code></td>
+                                    <td>
+                                        <form method="post" asp-page-handler="RenameClient" class="d-flex gap-2">
+                                            <input type="hidden" name="clientId" value="@c.ClientId" />
+                                            <input class="form-control" name="newName" value="@c.ClientName" />
+                                            <button type="submit" class="btn btn-primary text-nowrap">Save</button>
+                                        </form>
+                                    </td>
+                                    <td>@c.ReportFiles.Count</td>
+                                    <td class="text-muted"><small>synced @c.LastSynced.ToString("yyyy-MM-dd HH:mm")Z</small></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+
+                    @if (Model.DirTotalPages > 1)
+                    {
+                        <nav aria-label="Client directory pages">
+                            <ul class="pagination justify-content-center">
+                                <li class="page-item @(Model.DirPage <= 1 ? "disabled" : "")">
+                                    <a class="page-link" href="?tab=1&dirPage=@(Model.DirPage - 1)">Previous</a>
+                                </li>
+                                @for (var p = 1; p <= Model.DirTotalPages; p++)
+                                {
+                                    <li class="page-item @(p == Model.DirPage ? "active" : "")">
+                                        <a class="page-link" href="?tab=1&dirPage=@p">@p</a>
+                                    </li>
+                                }
+                                <li class="page-item @(Model.DirPage >= Model.DirTotalPages ? "disabled" : "")">
+                                    <a class="page-link" href="?tab=1&dirPage=@(Model.DirPage + 1)">Next</a>
+                                </li>
+                            </ul>
+                        </nav>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab 2: Existing Mappings -->
+    <div class="tab-pane fade @(Model.ActiveTab == 2 ? "show active" : "")" id="mappings-pane" role="tabpanel">
+        <div class="card mb-4">
+            <div class="card-header">Existing Mappings</div>
+            <div class="card-body">
+                <p class="text-muted">
+                    Maps Entra security groups to companies. Anyone who is a member of a group below
+                    can view that company's latest AI Ready Leader Insights report. Add users to the group in
+                    Entra ID directly (this portal does not manage group membership) — they'll need
+                    to sign out and back in for a newly-added group to take effect. The contact email is
+                    recorded for reference only (e.g. who owns/requested the group) and is not used to
+                    send anything automatically.
+                </p>
+                @if (Model.Mappings.Count == 0)
+                {
+                    <p class="text-muted">No mappings yet — add one on the "Add New Mapping" tab.</p>
+                }
+                else
+                {
+                    @* Each mapping's editable fields live in <td> cells but their <form> is
+                       rendered separately (below the table) and referenced via the HTML
+                       "form" attribute -- a <form> cannot legally wrap multiple <td> cells
+                       directly inside a <tr> (browsers foster-parent it right out of the
+                       table), so this is the standards-compliant way to submit a row's
+                       scattered cell inputs together. *@
+                    <table class="table table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th>Group Name</th>
+                                <th>Group Object ID</th>
+                                <th>Company</th>
+                                <th>Contact Email</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var m in Model.PagedMappings)
+                            {
+                                var formId = $"mapping-{m.Id}";
+                                <tr>
+                                    <td><input class="form-control" form="@formId" name="editGroupName" value="@m.GroupName" /></td>
+                                    <td><code>@m.GroupId</code></td>
+                                    <td>
+                                        <select class="form-select" form="@formId" name="editClientId">
+                                            @foreach (var c in Model.KnownClients)
+                                            {
+                                                <option value="@c.ClientId" selected="@(c.ClientId == m.ClientId)">@c.ClientName</option>
+                                            }
+                                        </select>
+                                    </td>
+                                    <td><input class="form-control" form="@formId" name="editContactEmail" value="@m.ContactEmail" placeholder="owner@company.com" /></td>
+                                    <td class="text-nowrap">
+                                        <button type="submit" form="@formId" asp-page="/ManageAccess" asp-page-handler="EditMapping"
+                                                class="btn btn-primary">Save</button>
+                                        <button type="submit" form="@formId" asp-page="/ManageAccess" asp-page-handler="Delete"
+                                                class="btn btn-outline-danger"
+                                                onclick="return confirm('Remove this mapping?');">Remove</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                    @* Hidden per-row forms, kept OUTSIDE the table (a <form> is not a
+                       legal direct child of <tbody> either -- same foster-parenting
+                       issue) and referenced purely via the "form" attribute above. *@
+                    @foreach (var m in Model.PagedMappings)
+                    {
+                        <form id="mapping-@m.Id" method="post">
+                            <input type="hidden" name="id" value="@m.Id" />
+                            <input type="hidden" name="groupId" value="@m.GroupId" />
+                        </form>
+                    }
+
+                    @if (Model.MapTotalPages > 1)
+                    {
+                        <nav aria-label="Mapping pages">
+                            <ul class="pagination justify-content-center">
+                                <li class="page-item @(Model.MapPage <= 1 ? "disabled" : "")">
+                                    <a class="page-link" href="?tab=2&mapPage=@(Model.MapPage - 1)">Previous</a>
+                                </li>
+                                @for (var p = 1; p <= Model.MapTotalPages; p++)
+                                {
+                                    <li class="page-item @(p == Model.MapPage ? "active" : "")">
+                                        <a class="page-link" href="?tab=2&mapPage=@p">@p</a>
+                                    </li>
+                                }
+                                <li class="page-item @(Model.MapPage >= Model.MapTotalPages ? "disabled" : "")">
+                                    <a class="page-link" href="?tab=2&mapPage=@(Model.MapPage + 1)">Next</a>
+                                </li>
+                            </ul>
+                        </nav>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab 3: Add New Mapping -->
+    <div class="tab-pane fade @(Model.ActiveTab == 3 ? "show active" : "")" id="add-pane" role="tabpanel">
+        <div class="card mb-4">
+            <div class="card-header">Add New Mapping</div>
+            <div class="card-body">
+                @if (Model.KnownClients.Count == 0)
+                {
+                    <p class="text-muted">Sync the client directory (first tab) before adding a mapping.</p>
+                }
+                else
+                {
+                    <form method="post" asp-page-handler="Add" id="addMappingForm">
+                        <p class="text-muted">
+                            Grant a company's report access to everyone in an Entra security group.
+                            Copy the group's Object ID from its Overview page in Entra ID.
+                        </p>
+                        <div class="row g-4">
+                            <div class="col-md-6">
+                                <label class="form-label">Entra Group Object ID</label>
+                                <input class="form-control" asp-for="NewGroupId" placeholder="e.g. 96f3add0-92da-45c9-9800-91cbaf9e9a38" required />
+                                <div class="form-text">The group's Object ID (a GUID), not its display name.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Group Display Name</label>
+                                <input class="form-control" asp-for="NewGroupName" placeholder="e.g. AIRL-Pulse-Viewers-AcmeCorp" required />
+                                <div class="form-text">Shown in the Existing Mappings tab -- for reference, not looked up.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Company</label>
+                                <select class="form-select" asp-for="NewClientId" required>
+                                    <option value="">-- select a company --</option>
+                                    @foreach (var c in Model.KnownClients)
+                                    {
+                                        <option value="@c.ClientId">@c.ClientName</option>
+                                    }
+                                </select>
+                                <div class="form-text">The company whose reports this group can view.</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Contact Email <span class="text-muted fw-normal">(optional)</span></label>
+                                <input class="form-control" type="email" asp-for="NewContactEmail" placeholder="owner@company.com" />
+                                <div class="form-text">Who owns/requested the group -- recorded for reference only.</div>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 mt-4 pt-3 border-top">
+                            <button type="submit" class="btn btn-primary">Add mapping</button>
+                            <button type="reset" form="addMappingForm" class="btn btn-outline-dark">Cancel</button>
+                        </div>
+                    </form>
+                }
+            </div>
+        </div>
+    </div>
+</div>

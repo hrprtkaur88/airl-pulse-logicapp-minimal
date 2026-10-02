@@ -87,6 +87,7 @@ builder.Services.AddSingleton(_ => new CosmosClient(cosmosEndpoint, cred,
         }
     }));
 builder.Services.AddSingleton<CosmosUserService>();
+builder.Services.AddSingleton<GroupAccessService>();
 
 // --- Blob client for report container -----------------------------------
 var storageAccount = builder.Configuration["Storage:Account"]
@@ -94,6 +95,9 @@ var storageAccount = builder.Configuration["Storage:Account"]
 builder.Services.AddSingleton(_ => new BlobServiceClient(
     new Uri($"https://{storageAccount}.blob.core.windows.net/"), cred));
 builder.Services.AddSingleton<BlobReportService>();
+// ClientDirectoryService's report_files sync depends on BlobReportService, so
+// it's registered after both Cosmos and Blob singletons are available.
+builder.Services.AddSingleton<ClientDirectoryService>();
 
 // --- Application Insights (workspace-based) ------------------------------
 var appiConn = builder.Configuration["ApplicationInsights:ConnectionString"];
@@ -214,17 +218,82 @@ app.MapControllers();
 // Signed-in proxy for the current user's latest report.
 // Emits a locked-down CSP specifically on this response so any LLM-injected
 // <script> in the report HTML cannot exfiltrate cookies or call out.
-app.MapGet("/report/latest", async (HttpContext http, CosmosUserService users, BlobReportService reports, CancellationToken ct) =>
+// Access is computed from the caller's Entra security-group membership
+// (the "groups" claim -- see EntraGroupClaims) intersected with the
+// group_access Cosmos container, NOT from the ?client= query string --
+// that parameter only selects WHICH of the caller's own accessible
+// companies to view; it can never be used to see a company the caller
+// doesn't have a group mapping for.
+app.MapGet("/report/latest", async (HttpContext http, GroupAccessService groupAccess, BlobReportService reports, CancellationToken ct) =>
 {
-    var email = http.User.FindFirst("preferred_username")?.Value
-                ?? http.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
-    if (string.IsNullOrWhiteSpace(email)) return Results.Redirect("/Unauthorized");
-    var user = await users.FindByEmailAsync(email, ct);
-    if (user is null) return Results.Redirect("/Unauthorized");
-    var payload = await reports.DownloadLatestReportAsync(user.ClientName, ct);
-    if (payload is null) return Results.NotFound($"No report available for {user.ClientName}");
+    var groupIds = EntraGroupClaims.GetGroupIds(http.User);
+    var accessible = await groupAccess.GetAccessibleClientsAsync(groupIds, ct);
+    if (accessible.Count == 0) return Results.Redirect("/Unauthorized");
+
+    var requested = http.Request.Query["client"].ToString();
+    (string ClientId, string ClientName) target;
+    if (!string.IsNullOrWhiteSpace(requested))
+    {
+        var match = accessible.FirstOrDefault(a => string.Equals(a.ClientId, requested, StringComparison.OrdinalIgnoreCase));
+        if (match.ClientId is null)
+            return Results.Json(new { error = "not authorized for the requested company" }, statusCode: StatusCodes.Status403Forbidden);
+        target = match;
+    }
+    else if (accessible.Count == 1)
+    {
+        target = accessible[0];
+    }
+    else
+    {
+        return Results.Json(new
+        {
+            error = "multiple companies available -- specify ?client=<clientId>",
+            options = accessible.Select(a => new { clientId = a.ClientId, clientName = a.ClientName }),
+        }, statusCode: StatusCodes.Status400BadRequest);
+    }
+
+    var payload = await reports.DownloadLatestReportAsync(target.ClientName, ct);
+    if (payload is null) return Results.NotFound($"No report available for {target.ClientName}");
 
     // Sandbox the served HTML — no scripts, no external resource loads.
+    http.Response.Headers["Content-Security-Policy"] =
+        "default-src 'none'; " +
+        "style-src 'unsafe-inline'; " +
+        "img-src data:; " +
+        "font-src data:; " +
+        "sandbox";
+    http.Response.Headers["X-Frame-Options"] = "DENY";
+    return Results.Stream(payload.Value.Content, payload.Value.ContentType);
+}).RequireAuthorization();
+
+// Same authorization model as /report/latest above (companies come from the
+// caller's own Entra group membership, never from the query string), but
+// streams a SPECIFIC dated report file rather than always the newest one --
+// backs the home page's "all reports, newest to oldest" list. The file name
+// must match the canonical report-file-(latest|DDMMYYYY).html pattern so a
+// caller can't traverse to another client's folder or an arbitrary blob;
+// combined with resolving the path from the caller's OWN validated
+// ClientName (never from user input), this can only ever resolve to a file
+// inside a company the caller is already authorized for.
+var reportFileNamePattern = new System.Text.RegularExpressions.Regex(@"^report-file-(latest|\d{8})\.html$");
+app.MapGet("/report/view", async (HttpContext http, GroupAccessService groupAccess, BlobReportService reports, CancellationToken ct) =>
+{
+    var groupIds = EntraGroupClaims.GetGroupIds(http.User);
+    var accessible = await groupAccess.GetAccessibleClientsAsync(groupIds, ct);
+    if (accessible.Count == 0) return Results.Redirect("/Unauthorized");
+
+    var requestedClient = http.Request.Query["client"].ToString();
+    var match = accessible.FirstOrDefault(a => string.Equals(a.ClientId, requestedClient, StringComparison.OrdinalIgnoreCase));
+    if (match.ClientId is null)
+        return Results.Json(new { error = "not authorized for the requested company" }, statusCode: StatusCodes.Status403Forbidden);
+
+    var name = http.Request.Query["name"].ToString();
+    if (string.IsNullOrWhiteSpace(name) || !reportFileNamePattern.IsMatch(name))
+        return Results.BadRequest("name must match ^report-file-(latest|DDMMYYYY).html$");
+
+    var payload = await reports.DownloadReportByNameAsync(match.ClientName, name, ct);
+    if (payload is null) return Results.NotFound($"Report {name} not found for {match.ClientName}");
+
     http.Response.Headers["Content-Security-Policy"] =
         "default-src 'none'; " +
         "style-src 'unsafe-inline'; " +

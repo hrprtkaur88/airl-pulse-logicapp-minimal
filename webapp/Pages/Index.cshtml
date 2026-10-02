@@ -1,31 +1,120 @@
 @page
 @model IndexModel
 @{
-    ViewData["Title"] = "AIRL Pulse Report Portal";
+    ViewData["Title"] = "AI Ready Leader Insights Portal";
 }
 
 <div class="text-center">
-    <h1 class="display-4">AIRL Pulse Report</h1>
+    <h1 class="display-4">AI Ready Leader Insights</h1>
 
-    @if (Model.SignedInUser is not null)
+    @if (Model.DisplayName is not null)
     {
-        <p class="lead">Welcome, <strong>@Model.SignedInUser.UserName</strong> — @Model.SignedInUser.ClientName.</p>
+        <p class="lead">Welcome, <strong>@Model.DisplayName</strong>.</p>
+    }
 
-        @if (Model.ReportAvailable)
+    @if (Model.IsAdmin)
+    {
+        <p><a asp-page="/ManageAccess">Manage Report Access (Admin)</a></p>
+    }
+
+    @if (Model.AccessibleCompanies.Count == 0)
+    {
+        <div class="alert alert-warning mt-3">
+            No report access is configured for your account yet.
+        </div>
+    }
+    else
+    {
+        @if (Model.AccessibleCompanies.Count > 1)
         {
-            <a class="btn btn-primary btn-lg mt-3"
-               href="/report/latest"
-               target="_blank" rel="noopener noreferrer">
-                View Latest Report
-            </a>
-            <p class="text-muted mt-3"><small>Served via a signed-in proxy from Blob Storage.</small></p>
+            <form method="get" class="row justify-content-center g-2 mt-3">
+                <div class="col-auto">
+                    <select name="client" id="companySelect" class="form-select">
+                        @foreach (var c in Model.AccessibleCompanies)
+                        {
+                            <option value="@c.ClientId" selected="@(c.ClientId == Model.SelectedClientId)">@c.ClientName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary">Switch</button>
+                </div>
+            </form>
         }
-        else
+
+        <h2 class="h4 mt-4" id="selectedCompanyHeading">@Model.SelectedClientName</h2>
+
+        <p id="staleSelectionHint" class="text-muted d-none">
+            Selection changed — click <strong>Switch</strong> above to view reports for the selected company.
+        </p>
+
+        <div id="reportsResults">
+        @if (Model.PagedReports.Count == 0)
         {
             <div class="alert alert-warning mt-3">
-                No report is available yet for <strong>@Model.SignedInUser.ClientName</strong>.
+                No report is available yet for <strong>@Model.SelectedClientName</strong>.
                 Please check back after the next monthly run.
             </div>
         }
+        else
+        {
+            <div class="row justify-content-center">
+                <div class="col-md-6">
+                    <table class="table table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th>Report date</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in Model.PagedReports)
+                            {
+                                <tr>
+                                    <td>
+                                        @r.Label
+                                        @if (r.IsLatest)
+                                        {
+                                            <span class="badge bg-primary ms-2">Latest</span>
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        <a class="btn btn-primary"
+                                           href="/report/view?client=@Model.SelectedClientId&name=@r.FileName"
+                                           target="_blank" rel="noopener noreferrer">
+                                            View
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+
+                    @if (Model.TotalPages > 1)
+                    {
+                        <nav aria-label="Report pages">
+                            <ul class="pagination justify-content-center">
+                                <li class="page-item @(Model.CurrentPage <= 1 ? "disabled" : "")">
+                                    <a class="page-link" href="?client=@Model.SelectedClientId&page=@(Model.CurrentPage - 1)">Previous</a>
+                                </li>
+                                @for (var p = 1; p <= Model.TotalPages; p++)
+                                {
+                                    <li class="page-item @(p == Model.CurrentPage ? "active" : "")">
+                                        <a class="page-link" href="?client=@Model.SelectedClientId&page=@p">@p</a>
+                                    </li>
+                                }
+                                <li class="page-item @(Model.CurrentPage >= Model.TotalPages ? "disabled" : "")">
+                                    <a class="page-link" href="?client=@Model.SelectedClientId&page=@(Model.CurrentPage + 1)">Next</a>
+                                </li>
+                            </ul>
+                        </nav>
+                    }
+                </div>
+            </div>
+            <p class="text-muted mt-3"><small>Served via a signed-in proxy from Blob Storage.</small></p>
+        }
+        </div>
     }
 </div>
+
+<script src="/js/company-select.js" asp-append-version="true"></script>
